@@ -1,16 +1,21 @@
 import math
 import tensorflow as tf
 import numpy as np
-import utils
+import flare.utils as utils
 
 
-def mixup(scene, flare):
+def mixup(scene, flare,mode='ISP'):
   I = flare[:,:,0]+flare[:,:,1]+flare[:,:,2]
   I = I / 3
-  a = np.random.random()*4+3
-  weight = 1/(1+np.e**(-a*(I-0.5)))
-  weight = weight - tf.reduce_min(tf.compat.v1.layers.flatten(weight))
-  weight = weight/tf.reduce_max(tf.compat.v1.layers.flatten(weight))
+  # a = np.random.random()*4+3
+  if mode == 'ISP':
+    a = 5
+    weight = 1/(1+np.e**(-a*(I-0.5)))
+    weight = weight - tf.reduce_min(tf.compat.v1.layers.flatten(weight))
+    weight = weight/tf.reduce_max(tf.compat.v1.layers.flatten(weight))
+  else:
+    a = 0
+    weight = 1/(1+np.e**(-a*(I-0.5)))
   a1 = (scene[:,:,0]*(1-weight)+flare[:,:,0]*weight)
   a2 = (scene[:,:,1]*(1-weight)+flare[:,:,1]*weight)
   a3 = (scene[:,:,2]*(1-weight)+flare[:,:,2]*weight)
@@ -24,25 +29,9 @@ def add_flare(scene,
               rotation = 0.,
               shift=[0,100],
               shear=[0.0,0.0],
-              scale=[1.0,1.0]):
+              scale=[1.0,1.0],
+              mode='ISP'):
   """Adds flare to natural images.
-
-  Here the natural images are in sRGB. They are first linearized before flare
-  patterns are added. The result is then converted back to sRGB.
-
-  Args:
-    scene: Natural image batch in sRGB.
-    flare: Lens flare image batch in sRGB.
-    noise: Strength of the additive Gaussian noise. For each image, the Gaussian
-      variance is drawn from a scaled Chi-squared distribution, where the scale
-      is defined by `noise`.
-    flare_max_gain: Maximum gain applied to the flare images in the linear
-      domain. RGB gains are applied randomly and independently, not exceeding
-      this maximum.
-    apply_affine: Whether to apply affine transformation.
-    training_res: Resolution of training images. Images must be square, and this
-      value specifies the side length.
-
   Returns:
     - Flare-free scene in sRGB.
     - Flare-only image in sRGB.
@@ -112,8 +101,8 @@ def add_flare(scene,
 
   # Random digital gain.
   # TODO, hyperparameter, bg become dark due to autoexposure
-  gain = tf.random.uniform([], 0.85, 0.85)  # varying the intensity scale
-  scene_linear = tf.clip_by_value(gain * scene_linear, 0.0, 1.0)
+  # gain = tf.random.uniform([], 0.85, 0.85)  # varying the intensity scale
+  # scene_linear = tf.clip_by_value(gain * scene_linear, 0.0, 1.0)
 
   scene_srgb = tf.image.adjust_gamma(scene_linear, 1.0 / gamma)
   # scene_srgb = scene_linear
@@ -123,7 +112,7 @@ def add_flare(scene,
   # combined_1 = mixup(scene_linear[0], flare_linear[0])
   # combined_2 = mixup(scene_linear[1], flare_linear[1])
   # combined_srgb = tf.stack([combined_1, combined_2])
-  combined_srgb = mixup(scene_linear, flare_linear)
+  combined_srgb = mixup(scene_linear, flare_linear,mode=mode)
   combined_srgb = tf.image.adjust_gamma(combined_srgb, 1.0 / gamma)
   combined_srgb = tf.clip_by_value(combined_srgb, 0.0, 1.0)
   
@@ -212,16 +201,13 @@ flare_path = "D:/2025/event_simu/flare/Compound_Flare/000935.png"
 
 scene, flare = load_images(scene_path, flare_path)
 position = [100, 100]
-def image_add_flare(scene, flare, position):
+def image_add_flare(scene, flare, position,mode='ISP'):
     image_size = tf.shape(scene)
 
 
     shift = position_to_shift(position, image_size)
     # 将场景和flare图像传递给 `add_flare_at_position` 函数
-    scene_srgb, flare_srgb, scene_with_flare, gamma = add_flare(scene, flare, noise=0, shift=shift)
-    output_image_path = "D:/2025/event_simu/flare/scene_with_flare_output.jpg"
-    save_image(scene_with_flare, output_image_path, file_format='jpeg')
-    output_image_path = "D:/2025/event_simu/flare/flare_output.jpg"
-    save_image(flare_srgb, output_image_path, file_format='jpeg')
+    scene_srgb, flare_srgb, scene_with_flare, gamma = add_flare(scene, flare, noise=0, shift=shift,mode=mode)
+    return scene_srgb, flare_srgb, scene_with_flare, gamma
 image_add_flare(scene, flare, position)
 #TODO, single image change to video, add  point light source
