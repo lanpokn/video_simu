@@ -8,17 +8,26 @@ def mixup(scene, flare,mode='ISP'):
   I = flare[:,:,0]+flare[:,:,1]+flare[:,:,2]
   I = I / 3
   # a = np.random.random()*4+3
+  # 黑洞原因：基于凸组合，当flare很小时强行拉大，此时flare强度远低于场景，导致flare处明显变暗
+  # 关键是，它的强度分配只基于flare，没考虑flare逐渐变暗消失时，已经不满足它的flare强度假设
+  # 因此必须和场景共同考虑，建立一个当flare逐渐消失时依然成立的凸组合
+  # 这需要从头推翻它的方法？
   if mode == 'ISP':
+    #TODO,怎么改？
+    #不tf.reduce_max(tf.compat.v1.layers.flatten(weight))，是否可行？
     a = 5
     weight = 1/(1+np.e**(-a*(I-0.5)))
-    weight = weight - tf.reduce_min(tf.compat.v1.layers.flatten(weight))
-    weight = weight/tf.reduce_max(tf.compat.v1.layers.flatten(weight))
+    # weight = weight - tf.reduce_min(tf.compat.v1.layers.flatten(weight))
+    # weight = weight/tf.reduce_max(tf.compat.v1.layers.flatten(weight))
+    a1 = (scene[:,:,0]*(1-weight)+flare[:,:,0]*weight)
+    a2 = (scene[:,:,1]*(1-weight)+flare[:,:,1]*weight)
+    a3 = (scene[:,:,2]*(1-weight)+flare[:,:,2]*weight)
   else:
     a = 0
     weight = 1/(1+np.e**(-a*(I-0.5)))
-  a1 = (scene[:,:,0]*(1-weight)+flare[:,:,0]*weight)
-  a2 = (scene[:,:,1]*(1-weight)+flare[:,:,1]*weight)
-  a3 = (scene[:,:,2]*(1-weight)+flare[:,:,2]*weight)
+    a1 = (scene[:,:,0]*(1-weight)+flare[:,:,0]*weight)*2
+    a2 = (scene[:,:,1]*(1-weight)+flare[:,:,1]*weight)*2
+    a3 = (scene[:,:,2]*(1-weight)+flare[:,:,2]*weight)*2
   return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0)
 
 def add_flare(scene,
@@ -30,7 +39,9 @@ def add_flare(scene,
               shift=[0,100],
               shear=[0.0,0.0],
               scale=[1.0,1.0],
-              mode='ISP'):
+              mode='ISP',
+              gamma=2,
+              theta = 0):
   """Adds flare to natural images.
   Returns:
     - Flare-free scene in sRGB.
@@ -42,8 +53,15 @@ def add_flare(scene,
 
   # Since the gamma encoding is unknown, we use a random value so that the model
   # will hopefully generalize to a reasonable range of gammas.
-  gamma = tf.random.uniform([], 1.8, 2.2)
+  # gamma = tf.random.uniform([], 1.8, 2.2)
+  # gamma = 2.0
+  # convert to Raw? but no tone mapping 
+  # 如果输入是一般RGB,这一整套都是反的？
+  # 是的，伽马值 2.2 通常是指在图像信号处理（ISP）流程中，将 Raw 图像的线性强度值 转换为最终输出图像（如 sRGB 或 Rec.709 格式）中的 非线性强度值。这一步是为了匹配人眼对亮度的感知特性，最终显示在屏幕上的图像会更符合视觉效果。
+  # 所以 ISP gamma 需要是一个 1/2.2 encode 的 gamma， gpt不可信。。。
+
   flare_linear = tf.image.adjust_gamma(flare, gamma)
+  flare_linear = flare_linear*np.cos(theta)
 
   # Remove DC background in flare.
   # flare_linear = utils.remove_background(flare_linear)
@@ -201,13 +219,13 @@ flare_path = "D:/2025/event_simu/flare/Compound_Flare/000935.png"
 
 scene, flare = load_images(scene_path, flare_path)
 position = [100, 100]
-def image_add_flare(scene, flare, position,mode='ISP'):
+def image_add_flare(scene, flare, position,mode='ISP',theta=0):
     image_size = tf.shape(scene)
 
 
     shift = position_to_shift(position, image_size)
     # 将场景和flare图像传递给 `add_flare_at_position` 函数
-    scene_srgb, flare_srgb, scene_with_flare, gamma = add_flare(scene, flare, noise=0, shift=shift,mode=mode)
+    scene_srgb, flare_srgb, scene_with_flare, gamma = add_flare(scene, flare, noise=0, shift=shift,mode=mode,theta=theta)
     return scene_srgb, flare_srgb, scene_with_flare, gamma
 image_add_flare(scene, flare, position)
 #TODO, single image change to video, add  point light source

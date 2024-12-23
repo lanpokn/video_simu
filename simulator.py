@@ -177,11 +177,11 @@ class simulator:
                 for pos in self.position:                    
                     # Compute theta for the flare attenuation at each position
                     theta = calculate_angle_between_pixel_and_film(pos, self.intrinsic_matrix)
-                    flare = self.flare * np.cos(theta)  # Apply cos(theta) attenuation to flare
+                    # flare = self.flare * np.cos(theta)  # Apply cos(theta) attenuation to flare
                     #TODO, may be it's better to add in raw domain?
                     #theta can be a parameter of image_add_flare
                     #现有方法根据flare强度分区的办法，可能会导致flare强度衰减失效，需要推导理论改进
-                    scene_srgb, flare_srgb, scene_with_flare, _ = image_add_flare(self.scene, flare, pos, mode=mode)
+                    scene_srgb, flare_srgb, scene_with_flare, _ = image_add_flare(self.scene, self.flare, pos, mode=mode,theta=theta)
 
                     # Store results in the lists
                     scene_with_flare_list.append(scene_with_flare)
