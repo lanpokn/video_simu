@@ -3,6 +3,8 @@ import math_utils
 import numpy as np
 scene_path = "D:/2025/event_simu/flare/scene/12798.jpg"
 flare_path = "D:/2025/event_simu/flare/Compound_Flare/000935.png"
+# flare_path = "D:/2025/event_simu/flare/Compound_Flare/000000.png"
+
 # intrinsic_matrix = np.array([[1000, 0, 320], [0, 1000, 320], [0, 0, 1]])
 intrinsic_matrix = np.array([[100, 0, 320], [0, 100, 320], [0, 0, 1]])
 

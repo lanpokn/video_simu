@@ -5,30 +5,41 @@ import flare.utils as utils
 
 
 def mixup(scene, flare,mode='ISP'):
-  I = flare[:,:,0]+flare[:,:,1]+flare[:,:,2]
-  I = I / 3
+  # I = flare[:,:,0]+flare[:,:,1]+flare[:,:,2]
+  # I = I / 3
+  #change by hhq, intensity estimation based on quantum efficiency
+  I = flare[:,:,0]*0.2126+flare[:,:,1]*0.7152+flare[:,:,2]*0.0722
+
   # a = np.random.random()*4+3
   # 黑洞原因：基于凸组合，当flare很小时强行拉大，此时flare强度远低于场景，导致flare处明显变暗
   # 关键是，它的强度分配只基于flare，没考虑flare逐渐变暗消失时，已经不满足它的flare强度假设
   # 因此必须和场景共同考虑，建立一个当flare逐渐消失时依然成立的凸组合
   # 这需要从头推翻它的方法？
+  # why sigmoid? is there any better way?它的证明只涉及两个极端，中间是一概没提，有点正确的废话
   if mode == 'ISP':
     #TODO,怎么改？
     #不tf.reduce_max(tf.compat.v1.layers.flatten(weight))，是否可行？
-    a = 5
-    weight = 1/(1+np.e**(-a*(I-0.5)))
+    a = 2
+    # weight = 1/(1+np.e**(-a*(I-0.5)))
+    # weight = np.sqrt(I)
+    weight = I**3 + 2 * I*(1-I)
+    # k = 10
+    # weight = 0.5 * (1 + np.tanh(k * (I - 0.5)))
     # weight = weight - tf.reduce_min(tf.compat.v1.layers.flatten(weight))
     # weight = weight/tf.reduce_max(tf.compat.v1.layers.flatten(weight))
     a1 = (scene[:,:,0]*(1-weight)+flare[:,:,0]*weight)
     a2 = (scene[:,:,1]*(1-weight)+flare[:,:,1]*weight)
     a3 = (scene[:,:,2]*(1-weight)+flare[:,:,2]*weight)
+    return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0),scene[:,:,0]*(1-weight),flare[:,:,0]*weight
+
+
   else:
     a = 0
     weight = 1/(1+np.e**(-a*(I-0.5)))
     a1 = (scene[:,:,0]*(1-weight)+flare[:,:,0]*weight)*2
     a2 = (scene[:,:,1]*(1-weight)+flare[:,:,1]*weight)*2
     a3 = (scene[:,:,2]*(1-weight)+flare[:,:,2]*weight)*2
-  return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0)
+    return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0),scene[:,:,0]*(1-weight)*2,flare[:,:,0]*weight*2
 
 def add_flare(scene,
               flare,
@@ -101,7 +112,7 @@ def add_flare(scene,
   # offset = tf.random.uniform([], -0.02, 0.02)
   # flare_linear = tf.clip_by_value(flare_linear + offset, 0.0, 1.0)
 
-  flare_srgb = tf.image.adjust_gamma(flare_linear, 1.0 / gamma)
+  # flare_srgb = tf.image.adjust_gamma(flare_linear, 1.0 / gamma)
   # flare_srgb = flare_linear
 
   # Scene augmentation: random crop and flips.
@@ -122,7 +133,7 @@ def add_flare(scene,
   # gain = tf.random.uniform([], 0.85, 0.85)  # varying the intensity scale
   # scene_linear = tf.clip_by_value(gain * scene_linear, 0.0, 1.0)
 
-  scene_srgb = tf.image.adjust_gamma(scene_linear, 1.0 / gamma)
+  # scene_srgb = tf.image.adjust_gamma(scene_linear, 1.0 / gamma)
   # scene_srgb = scene_linear
 
   # Combine the flare-free scene with a flare pattern to produce a synthetic
@@ -130,9 +141,15 @@ def add_flare(scene,
   # combined_1 = mixup(scene_linear[0], flare_linear[0])
   # combined_2 = mixup(scene_linear[1], flare_linear[1])
   # combined_srgb = tf.stack([combined_1, combined_2])
-  combined_srgb = mixup(scene_linear, flare_linear,mode=mode)
+  combined_srgb,scene_srgb,flare_srgb = mixup(scene_linear, flare_linear,mode=mode)
   combined_srgb = tf.image.adjust_gamma(combined_srgb, 1.0 / gamma)
   combined_srgb = tf.clip_by_value(combined_srgb, 0.0, 1.0)
+
+  scene_srgb = tf.image.adjust_gamma(scene_srgb, 1.0 / gamma)
+  scene_srgb = tf.clip_by_value(scene_srgb, 0.0, 1.0)
+
+  flare_srgb = tf.image.adjust_gamma(flare_srgb, 1.0 / gamma)
+  flare_srgb = tf.clip_by_value(flare_srgb, 0.0, 1.0)
   
   return (utils.quantize_8(scene_srgb), utils.quantize_8(flare_srgb),
           utils.quantize_8(combined_srgb), gamma)
