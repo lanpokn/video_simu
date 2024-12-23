@@ -30,7 +30,9 @@ def mixup(scene, flare,mode='ISP'):
     a1 = (scene[:,:,0]*(1-weight)+flare[:,:,0]*weight)
     a2 = (scene[:,:,1]*(1-weight)+flare[:,:,1]*weight)
     a3 = (scene[:,:,2]*(1-weight)+flare[:,:,2]*weight)
-    return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0),scene[:,:,0]*(1-weight),flare[:,:,0]*weight
+    scene_rgb = tf.stack([scene[:, :, 0]*(1-weight),scene[:, :, 1]*(1-weight),scene[:, :, 2]*(1-weight)], axis=-1)
+    flare_rgb = tf.stack([flare[:, :, 0]*weight,flare[:, :, 1]*weight,flare[:, :, 2]*weight], axis=-1)
+    return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0),scene_rgb,flare_rgb
 
 
   else:
@@ -39,7 +41,7 @@ def mixup(scene, flare,mode='ISP'):
     a1 = (scene[:,:,0]*(1-weight)+flare[:,:,0]*weight)*2
     a2 = (scene[:,:,1]*(1-weight)+flare[:,:,1]*weight)*2
     a3 = (scene[:,:,2]*(1-weight)+flare[:,:,2]*weight)*2
-    return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0),scene[:,:,0]*(1-weight)*2,flare[:,:,0]*weight*2
+    return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0),scene,flare
 
 def add_flare(scene,
               flare,
