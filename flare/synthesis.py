@@ -33,6 +33,35 @@ def mixup(scene, flare,mode='ISP'):
     scene_rgb = tf.stack([scene[:, :, 0]*(1-weight),scene[:, :, 1]*(1-weight),scene[:, :, 2]*(1-weight)], axis=-1)
     flare_rgb = tf.stack([flare[:, :, 0]*weight,flare[:, :, 1]*weight,flare[:, :, 2]*weight], axis=-1)
     return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0),scene_rgb,flare_rgb
+  elif mode == 'analytic':
+    # 定义运算函数
+    def transform(x):
+        # 第一步计算 1/2 + cos(1/3 * (arccos(2x - 1) + pi))
+        intermediate = 1/2 + np.cos(1/3 * (np.arccos(2 * x - 1) + np.pi))
+        return intermediate
+
+    def final_transform(x):
+        # 第二步计算 3x^2 - 2x^3
+        return 3 * x**2 - 2 * x**3
+    #to make the border more naturl
+    threshold =0.01
+    flare = tf.where(flare < threshold, 0.0, flare)
+    # 对 scene 和 flare 应用第一步运算
+    transformed_scene = transform(scene)
+    transformed_flare = transform(flare)
+
+    #to the highest
+    transformed_scene = transformed_scene/(1-transformed_scene+0.000000001)
+    transformed_flare = transformed_flare/(1-transformed_flare+0.000000001)
+    # 加和两个 tensor
+    combined = transformed_scene + transformed_flare
+
+    #back to 0-1
+    combined = combined/(1+combined)
+
+    # 对加和结果应用第二步运算
+    final_result = final_transform(combined)
+    return tf.clip_by_value(final_result, 0.0, 1.0),scene,flare
 
 
   else:
