@@ -39,6 +39,8 @@ class DayFlare:
             self.iChannel0 = image if image.ndim == 2 else image[..., 0]
 
     def noise(self, t):
+        #noise只影响放射线部分
+        #TODO better noise function
         # """
         # Sample noise from iChannel0 based on the input t.
 
@@ -57,7 +59,7 @@ class DayFlare:
         # 
         # f.iChannel0.shape[1]).astype(int)  # Map to texture indices
         # return self.iChannel0[0, tex_coords]
-        return np.sin(10*t)*0.01
+        return np.sin(10*t)*0.1
 
     def lensflare(self, uv, pos):
         main = uv - pos
@@ -100,9 +102,14 @@ class DayFlare:
         c = np.zeros((*uv.shape[:2], 3))
         
         # R, G, B 通道的颜色分量
-        c[..., 0] += f2 + f4 + f5 + f6
-        c[..., 1] += f22 + f42 + f52 + f62
-        c[..., 2] += f23 + f43 + f53 + f63
+        #TODO 本质是经验公式！，fx表示的是不同层级的光晕，f0则为光源本身
+        #我应该重构这个代码，让每个经验公式的对应参数都更清晰，从而为参数标定找到理由和方法
+        c[..., 0] += f2 + f4 + f5 + f6+f1
+        c[..., 1] += f22 + f42 + f52 + f62+f1
+        c[..., 2] += f23 + f43 + f53 + f63+f1
+        # c[..., 0] += f2+f1
+        # c[..., 1] += f22+f1
+        # c[..., 2] += f23+f1
 
         # 调整强度和背景亮度
         c = c * 1.3 - np.linalg.norm(uvd, axis=-1, keepdims=True) * 0.05
