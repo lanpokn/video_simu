@@ -53,7 +53,9 @@ class DayFlare:
 
         # t = np.asarray(t)
         # tex_coords = (t % self.width) / self.width
-        # tex_coords = (tex_coords * self.iChannel0.shape[1]).astype(int)  # Map to texture indices
+        # tex_coords = (tex_coords * sel
+        # 
+        # f.iChannel0.shape[1]).astype(int)  # Map to texture indices
         # return self.iChannel0[0, tex_coords]
         return np.sin(10*t)*0.01
 
