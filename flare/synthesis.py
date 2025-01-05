@@ -4,6 +4,7 @@ import numpy as np
 import flare.utils as utils
 
 
+#TODO tone mapping 和 gamma矫正的顺序好像反了？
 def mixup(scene, flare,mode='ISP'):
   # I = flare[:,:,0]+flare[:,:,1]+flare[:,:,2]
   # I = I / 3
@@ -37,24 +38,40 @@ def mixup(scene, flare,mode='ISP'):
     # 定义运算函数
     def transform(x):
         # 第一步计算 1/2 + cos(1/3 * (arccos(2x - 1) + pi))
-        intermediate = 1/2 + np.cos(1/3 * (np.arccos(2 * x - 1) + np.pi))
+        # intermediate = 1/2 + np.cos(1/3 * (np.arccos(2 * x - 1) + np.pi))
+        # changed, use sin instead of cos
+        intermediate = 1/2 - np.sin(1/3 * (np.arcsin(1-2*x)))
         return intermediate
-
     def final_transform(x):
         # 第二步计算 3x^2 - 2x^3
         return 3 * x**2 - 2 * x**3
-    #to make the border more naturl
-    threshold =0.01
-    flare = tf.where(flare < threshold, 0.0, flare)
+    # def transform(x):
+    #     # 第一步计算 1/2 + cos(1/3 * (arccos(2x - 1) + pi))
+    #     # intermediate = 1/2 + np.cos(1/3 * (np.arccos(2 * x - 1) + np.pi))
+    #     # changed, use sin instead of cos
+    #     intermediate = 1/2 - np.sin(1/3 * (np.arcsin(1-2*x)))
+    #     return x
+    # def final_transform(x):
+    #     # 第二步计算 3x^2 - 2x^3
+    #     return x
+    # #to make the border more naturl
+    # threshold =0.02
+    # flare = tf.where(flare < threshold, 0.0, flare)
     # 对 scene 和 flare 应用第一步运算
     transformed_scene = transform(scene)
     transformed_flare = transform(flare)
 
     #to the highest
+    #TODO, 这样做是因为，上边多项式描述一般图像的tone mapping,但是极端图像有更夸张的非线性调整，原函数体现不出来
     transformed_scene = transformed_scene/(1-transformed_scene+0.000000001)
     transformed_flare = transformed_flare/(1-transformed_flare+0.000000001)
-    # 加和两个 tensor
-    combined = transformed_scene + transformed_flare
+    # 加和两个 tensor,考虑增益，假设相机ISP增益相同
+    gain_scene = 1
+    gain_flare = 1.5
+    gain_combine = 0.9*gain_flare+0.1*gain_scene
+    transformed_scene = transformed_scene * gain_scene
+    transformed_flare = transformed_flare * gain_flare
+    combined = (transformed_scene + transformed_flare)/gain_combine
 
     #back to 0-1
     combined = combined/(1+combined)
@@ -103,7 +120,7 @@ def add_flare(scene,
   # 所以 ISP gamma 需要是一个 1/2.2 encode 的 gamma， gpt不可信。。。
 
   flare_linear = tf.image.adjust_gamma(flare, gamma)
-  flare_linear = flare_linear*np.cos(theta)
+  # flare_linear = flare_linear*np.cos(theta)
 
   # Remove DC background in flare.
   # flare_linear = utils.remove_background(flare_linear)
