@@ -5,7 +5,7 @@ import flare.utils as utils
 
 
 #TODO tone mapping 和 gamma矫正的顺序好像反了？
-def mixup(scene, flare,mode='ISP'):
+def mixup(scene, flare,mode='ISP',gamma=2):
   # I = flare[:,:,0]+flare[:,:,1]+flare[:,:,2]
   # I = I / 3
   #change by hhq, intensity estimation based on quantum efficiency
@@ -58,17 +58,20 @@ def mixup(scene, flare,mode='ISP'):
     # threshold =0.02
     # flare = tf.where(flare < threshold, 0.0, flare)
     # 对 scene 和 flare 应用第一步运算
+
     transformed_scene = transform(scene)
     transformed_flare = transform(flare)
-
+    transformed_scene = tf.image.adjust_gamma(transformed_scene, gamma)
+    transformed_flare = tf.image.adjust_gamma(transformed_flare, gamma)
     #to the highest
     #TODO, 这样做是因为，上边多项式描述一般图像的tone mapping,但是极端图像有更夸张的非线性调整，原函数体现不出来
+    #这个函数同时完成高动态范围的取舍，与数字信号转模拟信号
     transformed_scene = transformed_scene/(1-transformed_scene+0.000000001)
     transformed_flare = transformed_flare/(1-transformed_flare+0.000000001)
     # 加和两个 tensor,考虑增益，假设相机ISP增益相同
     gain_scene = 1
-    gain_flare = 1.5
-    gain_combine = 0.9*gain_flare+0.1*gain_scene
+    gain_flare = 1.2
+    gain_combine = gain_flare
     transformed_scene = transformed_scene * gain_scene
     transformed_flare = transformed_flare * gain_flare
     combined = (transformed_scene + transformed_flare)/gain_combine
@@ -77,6 +80,7 @@ def mixup(scene, flare,mode='ISP'):
     combined = combined/(1+combined)
 
     # 对加和结果应用第二步运算
+    combined = tf.image.adjust_gamma(combined, 1.0/gamma)
     final_result = final_transform(combined)
     return tf.clip_by_value(final_result, 0.0, 1.0),scene,flare
 
@@ -189,15 +193,18 @@ def add_flare(scene,
   # combined_1 = mixup(scene_linear[0], flare_linear[0])
   # combined_2 = mixup(scene_linear[1], flare_linear[1])
   # combined_srgb = tf.stack([combined_1, combined_2])
-  combined_srgb,scene_srgb,flare_srgb = mixup(scene_linear, flare_linear,mode=mode)
-  combined_srgb = tf.image.adjust_gamma(combined_srgb, 1.0 / gamma)
-  combined_srgb = tf.clip_by_value(combined_srgb, 0.0, 1.0)
+  if mode=='analytic':
+    combined_srgb,scene_srgb,flare_srgb = mixup(tf.image.adjust_gamma(scene_linear, 1.0 / gamma), tf.image.adjust_gamma(flare_linear, 1.0 / gamma),mode=mode,gamma=gamma)
+  else:
+    combined_srgb,scene_srgb,flare_srgb = mixup(scene_linear, flare_linear,mode=mode)
+    combined_srgb = tf.image.adjust_gamma(combined_srgb, 1.0 / gamma)
+    combined_srgb = tf.clip_by_value(combined_srgb, 0.0, 1.0)
 
-  scene_srgb = tf.image.adjust_gamma(scene_srgb, 1.0 / gamma)
-  scene_srgb = tf.clip_by_value(scene_srgb, 0.0, 1.0)
+    scene_srgb = tf.image.adjust_gamma(scene_srgb, 1.0 / gamma)
+    scene_srgb = tf.clip_by_value(scene_srgb, 0.0, 1.0)
 
-  flare_srgb = tf.image.adjust_gamma(flare_srgb, 1.0 / gamma)
-  flare_srgb = tf.clip_by_value(flare_srgb, 0.0, 1.0)
+    flare_srgb = tf.image.adjust_gamma(flare_srgb, 1.0 / gamma)
+    flare_srgb = tf.clip_by_value(flare_srgb, 0.0, 1.0)
   
   return (utils.quantize_8(scene_srgb), utils.quantize_8(flare_srgb),
           utils.quantize_8(combined_srgb), gamma)
