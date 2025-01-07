@@ -44,3 +44,9 @@ R.save_images_or_video(scene_with_flare_ISP, "D:/2025/event_simu/result/scene_wi
 R.save_images_or_video(scene_with_flare_ISP, "D:/2025/event_simu/result/scene_with_flare_analytic", save_as_video=False)
 R.save_images_or_video(flare_ISP, "D:/2025/event_simu/result/flare_analytic.mp4", save_as_video=True)
 R.save_images_or_video(flare_ISP, "D:/2025/event_simu/result/flare_analytic", save_as_video=False)
+
+_,flare_ISP,scene_with_flare_ACES = R.single_image_add_flare(mode='ACES')
+R.save_images_or_video(scene_with_flare_ACES, "D:/2025/event_simu/result/scene_with_flare_ACES.mp4", save_as_video=True)
+R.save_images_or_video(scene_with_flare_ACES, "D:/2025/event_simu/result/scene_with_flare_ACES", save_as_video=False)
+# R.save_images_or_video(flare_ISP, "D:/2025/event_simu/result/flare_analytic.mp4", save_as_video=True)
+# R.save_images_or_video(flare_ISP, "D:/2025/event_simu/result/flare_analytic", save_as_video=False)

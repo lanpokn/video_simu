@@ -34,7 +34,7 @@ def mixup(scene, flare,mode='ISP',gamma=2):
     scene_rgb = tf.stack([scene[:, :, 0]*(1-weight),scene[:, :, 1]*(1-weight),scene[:, :, 2]*(1-weight)], axis=-1)
     flare_rgb = tf.stack([flare[:, :, 0]*weight,flare[:, :, 1]*weight,flare[:, :, 2]*weight], axis=-1)
     return tf.clip_by_value(tf.stack([a1,a2,a3], axis=-1), 0.0, 1.0),scene_rgb,flare_rgb
-  elif mode == 'analytic':
+  elif mode == 'analytic' or mode == 'ACES':
     # 定义运算函数
     def transform(x):
         # 第一步计算 1/2 + cos(1/3 * (arccos(2x - 1) + pi))
@@ -45,29 +45,70 @@ def mixup(scene, flare,mode='ISP',gamma=2):
     def final_transform(x):
         # 第二步计算 3x^2 - 2x^3
         return 3 * x**2 - 2 * x**3
+    # Forward function: ACES tone mapping
+    def ACES(color):
+        A = 2.51
+        B = 0.03
+        C = 2.43
+        D = 0.59
+        E = 0.14
+        return (color * (A * color + B)) / (color * (C * color + D) + E)
+
+    # Inverse function: Solve the quadratic equation to get the reverse mapping
+    def ACES_reverse(x):
+        A = 2.51
+        B = 0.03
+        C = 2.43
+        D = 0.59
+        E = 0.14
+
+        # Coefficients of the quadratic equation
+        a = x * C - A
+        b = x * D - B
+        c = x * E
+
+        # Calculate the discriminant
+        discriminant = b**2 - 4 * a * c
+
+        # Check for valid solutions
+        if np.any(discriminant < 0):
+            raise ValueError("No real solution exists for some input values.")
+
+        # Solve the quadratic equation using the positive root
+        root = (-b - np.sqrt(discriminant)) / (2 * a)
+        return root
+       
     # def transform(x):
-    #     # 第一步计算 1/2 + cos(1/3 * (arccos(2x - 1) + pi))
     #     # intermediate = 1/2 + np.cos(1/3 * (np.arccos(2 * x - 1) + np.pi))
     #     # changed, use sin instead of cos
     #     intermediate = 1/2 - np.sin(1/3 * (np.arcsin(1-2*x)))
     #     return x
     # def final_transform(x):
-    #     # 第二步计算 3x^2 - 2x^3
     #     return x
     # #to make the border more naturl
     # threshold =0.02
     # flare = tf.where(flare < threshold, 0.0, flare)
-    # 对 scene 和 flare 应用第一步运算
+    if mode == "analytic":
+      transformed_scene = transform(scene)
+      transformed_flare = transform(flare)
+      transformed_scene = tf.image.adjust_gamma(transformed_scene, gamma)
+      transformed_flare = tf.image.adjust_gamma(transformed_flare, gamma)
+      #to the highest
+      #TODO, 这样做是因为，上边多项式描述一般图像的tone mapping,但是极端图像有更夸张的非线性调整，原函数体现不出来
+      #这个函数同时完成高动态范围的取舍，与数字信号转模拟信号
+      transformed_scene = transformed_scene/(1-transformed_scene+0.000000001)
+      transformed_flare = transformed_flare/(1-transformed_flare+0.000000001)
+    elif mode == "ACES":
+      #似乎此时gamma矫正要在tone之后，不然范围对不上？这个需要理清楚
+      transformed_scene = tf.image.adjust_gamma(scene, gamma)
+      transformed_flare = tf.image.adjust_gamma(flare, gamma)
+      transformed_scene = ACES_reverse(transformed_scene)
+      transformed_flare = ACES_reverse(transformed_flare)
+      # transformed_scene = ACES_reverse(scene)
+      # transformed_flare = ACES_reverse(flare)
 
-    transformed_scene = transform(scene)
-    transformed_flare = transform(flare)
-    transformed_scene = tf.image.adjust_gamma(transformed_scene, gamma)
-    transformed_flare = tf.image.adjust_gamma(transformed_flare, gamma)
-    #to the highest
-    #TODO, 这样做是因为，上边多项式描述一般图像的tone mapping,但是极端图像有更夸张的非线性调整，原函数体现不出来
-    #这个函数同时完成高动态范围的取舍，与数字信号转模拟信号
-    transformed_scene = transformed_scene/(1-transformed_scene+0.000000001)
-    transformed_flare = transformed_flare/(1-transformed_flare+0.000000001)
+
+
     # 加和两个 tensor,考虑增益，假设相机ISP增益相同
     gain_scene = 1
     gain_flare = 1.2
@@ -77,11 +118,17 @@ def mixup(scene, flare,mode='ISP',gamma=2):
     combined = (transformed_scene + transformed_flare)/gain_combine
 
     #back to 0-1
-    combined = combined/(1+combined)
+    if mode == "analytic":
+      combined = combined/(1+combined)
 
-    # 对加和结果应用第二步运算
-    combined = tf.image.adjust_gamma(combined, 1.0/gamma)
-    final_result = final_transform(combined)
+      # 对加和结果应用第二步运算
+      combined = tf.image.adjust_gamma(combined, 1.0/gamma)
+      final_result = final_transform(combined)
+    elif mode == "ACES":
+      #似乎此时gamma矫正要在tone之后，不然范围对不上？这个需要理清楚
+      final_result = ACES(combined)
+      final_result = tf.image.adjust_gamma(final_result, 1.0/gamma)
+
     return tf.clip_by_value(final_result, 0.0, 1.0),scene,flare
 
 
