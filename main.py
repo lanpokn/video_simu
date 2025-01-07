@@ -2,8 +2,8 @@ from simulator import simulator
 import math_utils
 import numpy as np
 scene_path = "D:/2025/event_simu/flare/scene/12798.jpg"
-# flare_path = "D:/2025/event_simu/flare/Compound_Flare/000935.png"
-flare_path = "D:/2025/event_simu/flare/Compound_Flare/000000.png"
+flare_path = "D:/2025/event_simu/flare/Compound_Flare/000935.png"
+# flare_path = "D:/2025/event_simu/flare/Compound_Flare/000000.png"
 
 # intrinsic_matrix = np.array([[1000, 0, 320], [0, 1000, 320], [0, 0, 1]])
 intrinsic_matrix = np.array([[100, 0, 320], [0, 100, 320], [0, 0, 1]])
@@ -18,7 +18,7 @@ R = simulator(intrinsic_matrix)
 start = [320, 320] # Starting position
 # start = [20, 20] # Starting position
 end = [1,1]  # Ending position
-num = 15  # Number of positions
+num = 150  # Number of positions
 positions = math_utils.generate_positions(start, end, num)
 # print(positions)
 R.single_image_flare_initial(scene_path, flare_path,positions)
