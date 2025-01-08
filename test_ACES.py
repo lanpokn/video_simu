@@ -33,26 +33,6 @@ def ACES_profession(x):
     color = np.dot(ACESOutputMat, color)
 
     return color
-
-# 输入范围为 0 到 100
-x = np.linspace(0, 100, 500)
-# 将 x 转换为 3 通道输入 (RGB)
-input_colors = np.stack([x, x, x], axis=1)
-# 计算 ACES_profession 输出
-output_colors = np.array([ACES_profession(color) for color in input_colors])
-
-# 绘制结果
-plt.figure(figsize=(10, 6))
-plt.plot(x, output_colors[:, 0], label='Red Channel', color='red')
-plt.plot(x, output_colors[:, 1], label='Green Channel', color='green')
-plt.plot(x, output_colors[:, 2], label='Blue Channel', color='blue')
-plt.xlabel('Input Value')
-plt.ylabel('Output Value')
-plt.title('ACES Profession Output Curve')
-plt.legend()
-plt.grid()
-plt.show()
-
 def ACES_profession_reverse(x):
     # 定义输入和输出的转换矩阵
     ACESInputMat = np.array([
@@ -68,42 +48,54 @@ def ACES_profession_reverse(x):
     ])
     ACESInputMat_inv = np.linalg.inv(ACESInputMat)
     ACESOutputMat_inv = np.linalg.inv(ACESOutputMat)
-    def RRTAndODTFit(v):
-        # """
-        # 模拟 HLSL 的 RRTAndODTFit 函数
-        # """
-        # a = v * (v + 0.0245786) - 0.000090537
-        # b = v * (0.983729 * v + 0.4329510) + 0.238081
-        # return a / b
-        A = 0.0245786
-        B = -0.000090537
-        C = 0.983729
-        D = 0.4329510
-        E = 0.238081
+    def RRTAndODTFitInverse(y):
+        """
+        计算 RRTAndODTFit 的逆函数
+        """
+        # 常量定义
+        A = 0.983729 * y - 1
+        B = 0.4329510 * y - 0.0245786
+        C = 0.238081 * y + 0.000090537
 
-        # Coefficients of the quadratic equation
-        a = x * C - A
-        b = x * D - B
-        c = x * E
+        # 判别式
+        discriminant = B**2 - 4 * A * C
+        # if discriminant < 0:
+        #     raise ValueError("No real solution exists for the given y")
 
-        # Calculate the discriminant
-        discriminant = b**2 - 4 * a * c
+        # 计算两个可能解
+        sqrt_discriminant = np.sqrt(discriminant)
+        # v1 = (-B + sqrt_discriminant) / (2 * A)
+        v2 = (-B - sqrt_discriminant) / (2 * A)
 
-        # Check for valid solutions
-        if np.any(discriminant < 0):
-            raise ValueError("No real solution exists for some input values.")
+        # 返回符合 v > 0 的解
+        return v2
 
-        # Solve the quadratic equation using the positive root
-        root = (-b - np.sqrt(discriminant)) / (2 * a)
-        return root
+
 
     # 转换为线性空间
-    color = np.dot(ACESInputMat, x)
+    color = np.dot(ACESOutputMat_inv, x)
 
     # 应用 RRT 和 ODT 映射
-    color = RRTAndODTFit(color)
+    color = RRTAndODTFitInverse(color)
 
     # 转换为 sRGB 空间
-    color = np.dot(ACESOutputMat, color)
+    color = np.dot(ACESInputMat_inv, color)
 
     return color
+# x = np.linspace(0, 1, 500)
+# # 将 x 转换为 3 通道输入 (RGB)
+# input_colors = np.stack([x, x, x], axis=1)
+# # 计算 ACES_profession 输出
+# output_colors = np.array([ACES_profession_reverse(color) for color in input_colors])
+
+# # 绘制结果
+# plt.figure(figsize=(10, 6))
+# plt.plot(x, output_colors[:, 0], label='Red Channel', color='red')
+# plt.plot(x, output_colors[:, 1], label='Green Channel', color='green')
+# plt.plot(x, output_colors[:, 2], label='Blue Channel', color='blue')
+# plt.xlabel('Input Value')
+# plt.ylabel('Output Value')
+# plt.title('ACES Profession Output Curve')
+# plt.legend()
+# plt.grid()
+# plt.show()

@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 import flare.utils as utils
 
+tf.experimental.numpy.experimental_enable_numpy_behavior()
 
 #TODO tone mapping 和 gamma矫正的顺序好像反了？
 def mixup(scene, flare,mode='ISP',gamma=2):
@@ -92,12 +93,16 @@ def mixup(scene, flare,mode='ISP',gamma=2):
       ])
 
       def RRTAndODTFit(v):
-          """
-          模拟 HLSL 的 RRTAndODTFit 函数
-          """
-          a = v * (v + 0.0245786) - 0.000090537
-          b = v * (0.983729 * v + 0.4329510) + 0.238081
-          return a / b
+        """
+        模拟 HLSL 的 RRTAndODTFit 函数
+        """
+        a = v * (v + 0.0245786) - 0.000090537
+        b = v * (0.983729 * v + 0.4329510) + 0.238081
+        return a / b
+
+      # 将图像展平为二维矩阵 (N, 3)，其中 N 是像素数
+      original_shape = x.shape
+      color = x.reshape(-1, 3).T
 
       # 转换为线性空间
       color = np.dot(ACESInputMat, color)
@@ -108,23 +113,60 @@ def mixup(scene, flare,mode='ISP',gamma=2):
       # 转换为 sRGB 空间
       color = np.dot(ACESOutputMat, color)
 
-      # # 限制值在 [0, 1] 范围内
-      # color = np.clip(color, 0, 1)
+      # 恢复为原始图像形状
+      color = color.T.reshape(original_shape)
 
       return color
-    #TODO
-    # def ACES_profession_reverse(x):
-       
-    # def transform(x):
-    #     # intermediate = 1/2 + np.cos(1/3 * (np.arccos(2 * x - 1) + np.pi))
-    #     # changed, use sin instead of cos
-    #     intermediate = 1/2 - np.sin(1/3 * (np.arcsin(1-2*x)))
-    #     return x
-    # def final_transform(x):
-    #     return x
-    # #to make the border more naturl
-    # threshold =0.02
-    # flare = tf.where(flare < threshold, 0.0, flare)
+
+    def ACES_profession_reverse(x):
+      # 定义输入和输出的转换矩阵
+      ACESInputMat = np.array([
+          [0.59719, 0.35458, 0.04823],
+          [0.07600, 0.90834, 0.01566],
+          [0.02840, 0.13383, 0.83777]
+      ])
+
+      ACESOutputMat = np.array([
+          [1.60475, -0.53108, -0.07367],
+          [-0.10208, 1.10813, -0.00605],
+          [-0.00327, -0.07276, 1.07602]
+      ])
+
+      ACESInputMat_inv = np.linalg.inv(ACESInputMat)
+      ACESOutputMat_inv = np.linalg.inv(ACESOutputMat)
+
+      def RRTAndODTFitInverse(y):
+        """
+        计算 RRTAndODTFit 的逆函数
+        """
+        A = 0.983729 * y - 1
+        B = 0.4329510 * y - 0.0245786
+        C = 0.238081 * y + 0.000090537
+
+        discriminant = B**2 - 4 * A * C
+        sqrt_discriminant = np.sqrt(discriminant)
+
+        # 选择符合 v > 0 的解
+        v2 = (-B - sqrt_discriminant) / (2 * A)
+        return v2
+
+      # 将图像展平为二维矩阵 (N, 3)，其中 N 是像素数
+      original_shape = x.shape
+      color = x.reshape(-1, 3).T
+
+      # 转换为线性空间
+      color = np.dot(ACESOutputMat_inv, color)
+
+      # 应用 RRT 和 ODT 映射的逆函数
+      color = RRTAndODTFitInverse(color)
+
+      # 转换为 sRGB 空间
+      color = np.dot(ACESInputMat_inv, color)
+
+      # 恢复为原始图像形状
+      color = color.T.reshape(original_shape)
+
+      return color
     if mode == "analytic":
       transformed_scene = transform(scene)
       transformed_flare = transform(flare)
@@ -139,10 +181,13 @@ def mixup(scene, flare,mode='ISP',gamma=2):
       #似乎此时gamma矫正要在tone之后，不然范围对不上？这个需要理清楚
       transformed_scene = tf.image.adjust_gamma(scene, gamma)
       transformed_flare = tf.image.adjust_gamma(flare, gamma)
-      transformed_scene = ACES_reverse(transformed_scene)
-      transformed_flare = ACES_reverse(transformed_flare)
+      # transformed_scene = ACES_reverse(transformed_scene)
+      # transformed_flare = ACES_reverse(transformed_flare)
       # transformed_scene = ACES_reverse(scene)
       # transformed_flare = ACES_reverse(flare)
+
+      transformed_scene = ACES_profession_reverse(transformed_scene)
+      transformed_flare = ACES_profession_reverse(transformed_flare)
 
 
 
@@ -163,7 +208,8 @@ def mixup(scene, flare,mode='ISP',gamma=2):
       final_result = final_transform(combined)
     elif mode == "ACES":
       #似乎此时gamma矫正要在tone之后，不然范围对不上？这个需要理清楚
-      final_result = ACES(combined)
+      # final_result = ACES(combined)
+      final_result = ACES_profession(combined)
       final_result = tf.image.adjust_gamma(final_result, 1.0/gamma)
 
     return tf.clip_by_value(final_result, 0.0, 1.0),scene,flare
